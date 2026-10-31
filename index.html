@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>노이즈 vs 추세</title>
+<style>
+:root{color-scheme:light;--surface:#fcfcfb;--text:#0b0b0b;--text2:#52514e;--grid:#e6e5e0;--axis:#a3a29c;--a:#2a78d6;--b:#eb6834}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--grid:#333330;--axis:#6f6e68;--a:#3987e5;--b:#d95926}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Malgun Gothic",sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.25rem;line-height:1.45;margin:0 0 16px;font-weight:650;word-break:keep-all}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.875rem;color:var(--text2);margin-bottom:8px}
+.legend i{display:inline-block;width:16px;height:2px;background:var(--c);vertical-align:middle;margin-right:6px}
+.legend .dash{background:none;border-top:2px dashed var(--axis);height:0}
+#chart{position:relative}
+svg{display:block;width:100%;touch-action:pan-y}
+svg text{font-size:12px;fill:var(--text2)}
+svg .title{font-size:13px;font-weight:600;fill:var(--text)}
+svg .note{fill:var(--text);font-weight:600}
+#tip{position:absolute;display:none;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:6px;padding:6px 10px;font-size:.8125rem;white-space:nowrap}
+details{margin-top:16px;font-size:.875rem}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums}
+th,td{padding:3px 6px;text-align:right;border-bottom:1px solid var(--grid)}
+th:first-child,td:first-child{text-align:left}
+footer{margin-top:20px;font-size:.8125rem;color:var(--text2)}
+</style></head><body><main>
+<h1>값이 더 큰 설비A는 한 번 튄 노이즈이고, 설비B는 13:00부터 온도가 오르는 추세로 평상 범위 판정(15:40)보다 160분 먼저 신호를 줍니다.</h1>
+<div class="legend">
+<span><i style="--c:var(--a)"></i>설비A 프레스 메인모터</span>
+<span><i style="--c:var(--b)"></i>설비B 차체 용접로봇 감속기</span>
+<span><i class="dash"></i>설비B 기준선 상한</span>
+</div>
+<div id="chart"><div id="tip"></div></div>
+<details><summary>데이터 표 보기</summary>
+<table><thead><tr><th>시각</th><th>설비A 진동(mm/s)</th><th>설비B 진동(mm/s)</th><th>설비B 온도(℃)</th></tr></thead><tbody id="tb"></tbody></table></details>
+<footer>가상 데이터(실습용). 출처: 강의 저장소 Day5_설비센서_50건_가상.csv, 2026-09-15 08:00~16:00. 판정 기준: 처음 12점의 평균 + 3 × 표준편차를 3번 연속 초과.</footer>
+</main>
+<script>
+const D=[{"t": "08:00", "a": 0.99, "b": 0.94, "bt": 55.6}, {"t": "08:20", "a": 1.05, "b": 1.05, "bt": 54.6}, {"t": "08:40", "a": 0.92, "b": 1.03, "bt": 55.5}, {"t": "09:00", "a": 0.93, "b": 1.03, "bt": 55.8}, {"t": "09:20", "a": 1.05, "b": 1.05, "bt": 55.8}, {"t": "09:40", "a": 1.0, "b": 1.0, "bt": 55.3}, {"t": "10:00", "a": 0.93, "b": 1.05, "bt": 55.7}, {"t": "10:20", "a": 0.96, "b": 1.01, "bt": 54.8}, {"t": "10:40", "a": 0.93, "b": 1.01, "bt": 54.1}, {"t": "11:00", "a": 0.96, "b": 0.96, "bt": 55.7}, {"t": "11:20", "a": 1.06, "b": 1.02, "bt": 55.4}, {"t": "11:40", "a": 1.0, "b": 1.01, "bt": 55.8}, {"t": "12:00", "a": 1.1, "b": 1.04, "bt": 54.3}, {"t": "12:20", "a": 0.9, "b": 1.04, "bt": 55.4}, {"t": "12:40", "a": 3.5, "b": 1.06, "bt": 56.7}, {"t": "13:00", "a": 1.0, "b": 1.05, "bt": 58.2}, {"t": "13:20", "a": 1.04, "b": 1.08, "bt": 57.8}, {"t": "13:40", "a": 0.94, "b": 1.1, "bt": 59.3}, {"t": "14:00", "a": 1.06, "b": 1.12, "bt": 60.9}, {"t": "14:20", "a": 1.06, "b": 1.09, "bt": 60.7}, {"t": "14:40", "a": 1.02, "b": 1.0, "bt": 61.4}, {"t": "15:00", "a": 1.03, "b": 1.3, "bt": 63.3}, {"t": "15:20", "a": 0.99, "b": 1.7, "bt": 63.3}, {"t": "15:40", "a": 0.93, "b": 2.2, "bt": 64.0}, {"t": "16:00", "a": 1.03, "b": 2.9, "bt": 65.1}];
+const NS='http://www.w3.org/2000/svg',box=document.getElementById('chart'),tip=document.getElementById('tip');
+document.getElementById('tb').innerHTML=D.map(d=>`<tr><td>${d.t}</td><td>${d.a}</td><td>${d.b}</td><td>${d.bt}</td></tr>`).join('');
+function el(p,n,a,t){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;p.appendChild(e);return e}
+function draw(){
+  box.querySelector('svg')?.remove();
+  const W=box.clientWidth;if(W<=0)return;const narrow=W<520,L=38,R=12,PH=narrow?170:210,G=52,T1=26,T2=T1+PH+G,H=T2+PH+28;
+  const s=el(box,'svg',{viewBox:`0 0 ${W} ${H}`,height:H,role:'img','aria-label':'설비A·B 진동과 설비B 온도의 시간별 그래프'});
+  box.insertBefore(s,tip);
+  const x=i=>L+i*(W-L-R)/(D.length-1);
+  const panel=(top,lo,hi,ticks,title)=>{
+    const y=v=>top+PH-(v-lo)/(hi-lo)*PH;
+    el(s,'text',{x:0,y:top-12,class:'title'},title);
+    ticks.forEach(v=>{el(s,'line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'var(--grid)'});el(s,'text',{x:L-6,y:y(v)+4,'text-anchor':'end'},v)});
+    D.forEach((d,i)=>{if(i%(narrow?6:3)==0){el(s,'line',{x1:x(i),x2:x(i),y1:top+PH,y2:top+PH+4,stroke:'var(--axis)'});el(s,'text',{x:x(i),y:top+PH+17,'text-anchor':i==0?'start':i==24?'end':'middle'},d.t)}});
+    return y};
+  const line=(y,k,c)=>el(s,'polyline',{points:D.map((d,i)=>x(i)+','+y(d[k])).join(' '),fill:'none',stroke:c,'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'});
+  const limit=(y,v,label)=>{el(s,'line',{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:'var(--axis)','stroke-dasharray':'4 4'});el(s,'text',{x:L+4,y:y(v)-5},label)};
+  const mark=(y,i,v,c,label,anchor,dx,dy)=>{el(s,'circle',{cx:x(i),cy:y(v),r:5,fill:c,stroke:'var(--surface)','stroke-width':2});el(s,'text',{x:x(i)+dx,y:y(v)+dy,'text-anchor':anchor,class:'note'},label)};
+  const y1=panel(T1,0,4,[0,1,2,3,4],'진동 (mm/s)');
+  limit(y1,1.12,'');
+  line(y1,'a','var(--a)');line(y1,'b','var(--b)');
+  mark(y1,14,3.5,'var(--a)','설비A 12:40 3.5 노이즈','middle',0,-10);
+  mark(y1,21,1.3,'var(--b)','설비B 15:00 추세 시작','end',-8,-10);
+  const y2=panel(T2,50,70,[50,55,60,65,70],'설비B 온도 (℃)');
+  limit(y2,57,'상한 57.00');
+  line(y2,'bt','var(--b)');
+  mark(y2,15,58.2,'var(--b)','13:00 추세 시작','end',-8,-10);
+  const ch=el(s,'line',{y1:T1,y2:T2+PH,stroke:'var(--axis)',visibility:'hidden'});
+  const hit=el(s,'rect',{x:L,y:T1,width:W-L-R,height:T2+PH-T1,fill:'transparent'});
+  const move=e=>{const r=s.getBoundingClientRect(),i=Math.max(0,Math.min(D.length-1,Math.round((e.clientX-r.left-L)/((W-L-R)/(D.length-1))))),d=D[i];
+    ch.setAttribute('x1',x(i));ch.setAttribute('x2',x(i));ch.setAttribute('visibility','visible');
+    tip.innerHTML=`<b>${d.t}</b><br>설비A 진동 ${d.a}<br>설비B 진동 ${d.b}<br>설비B 온도 ${d.bt}℃`;tip.style.display='block';
+    const w=tip.offsetWidth;tip.style.left=Math.max(0,x(i)+12+w>W?x(i)-12-w:x(i)+12)+'px';tip.style.top=(T1+8)+'px'};
+  hit.addEventListener('pointermove',move);hit.addEventListener('pointerdown',move);
+  hit.addEventListener('pointerleave',()=>{ch.setAttribute('visibility','hidden');tip.style.display='none'});
+}
+draw();addEventListener('resize',draw);
+</script></body></html>
